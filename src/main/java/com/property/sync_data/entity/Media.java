@@ -2,11 +2,15 @@ package com.property.sync_data.entity;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "media")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class Media {
 
     @Id

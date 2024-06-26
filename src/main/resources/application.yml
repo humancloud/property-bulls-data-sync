@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: property-bulls-data-sync
+
+  datasource:
+    username: postgres
+    password: root
+    url: jdbc:postgresql://192.168.10.11:5432/realtyna-demo
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+
+realtyna:
+  auth_url: https://realtyfeed-sso.auth.us-east-1.amazoncognito.com/oauth2/token
+  base_url: https://api.realtyfeed.com/reso/odata
+  client_id: 1t0utmqe41ksnvstdqbq6ucvkl
+  grant_type: client_credentials
+  client_secret: 144d23brl9a5srbfqjrgb3niuhu8l0k10qbdahmf9ltotp1p2h20
+  api_key: 7OQ1wWSLot6izTWlpPVTe6PHtAzkwJrC1IMfzjPK

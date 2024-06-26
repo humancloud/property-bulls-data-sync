@@ -7,24 +7,45 @@ import com.property.sync_data.entity.Property;
 import com.property.sync_data.repository.PropertyRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 @Service
 @Slf4j
 public class DataSyncService {
 
-    private final RestTemplate restTemplate;
+    @Value("${realtyna.auth_url}")
+    private String authUrl;
 
+    @Value("${realtyna.base_url}")
+    private String baseUrl;
+
+    @Value("${realtyna.client_id}")
+    private String clientId;
+
+    @Value("${realtyna.grant_type}")
+    private String grantType;
+
+    @Value("${realtyna.client_secret}")
+    private String clientSecret;
+
+    @Value("${realtyna.api_key}")
+    private String apiKey;
+
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final PropertyRepository propertyRepository;
 
@@ -39,32 +60,28 @@ public class DataSyncService {
     @Async("taskExecutor")
     public CompletableFuture<String> fetchAccessToken() {
         log.info("Fetching access token");
-        String url = "https://realtyfeed-sso.auth.us-east-1.amazoncognito.com/oauth2/token";
-
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
         MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("client_id", "1t0utmqe41ksnvstdqbq6ucvkl");
-        body.add("grant_type", "client_credentials");
-        body.add("client_secret", "144d23brl9a5srbfqjrgb3niuhu8l0k10qbdahmf9ltotp1p2h20");
+        body.add("client_id", clientId);
+        body.add("grant_type", grantType);
+        body.add("client_secret", clientSecret);
 
         HttpEntity<MultiValueMap<String, String>> requestEntity = new HttpEntity<>(body, headers);
 
         ResponseEntity<AccessTokenResponse> response = restTemplate.exchange(
-                url, HttpMethod.POST, requestEntity, AccessTokenResponse.class);
+                authUrl, HttpMethod.POST, requestEntity, AccessTokenResponse.class);
 
         String accessToken = Objects.requireNonNull(response.getBody()).getAccessToken();
-        log.info("Fetched access token: {}", accessToken);
         return CompletableFuture.completedFuture(accessToken);
     }
 
     @Async("taskExecutor")
     public CompletableFuture<List<Property>> fetchData(String accessToken) {
         log.info("Fetching data with access token: {}", accessToken);
-        String url = "https://api.realtyfeed.com/reso/odata/Property?$top=1000&$skip=0";
         List<Property> properties = new ArrayList<>();
-        fetchAllProperties(url, accessToken, properties);
+        fetchAllProperties(baseUrl + "/Property?$top=1&$skip=0", accessToken, properties);
         log.info("Fetched {} properties", properties.size());
         return CompletableFuture.completedFuture(properties);
     }
@@ -73,7 +90,7 @@ public class DataSyncService {
     public void fetchAllProperties(String url, String accessToken, List<Property> properties) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + accessToken);
-        headers.set("x-api-key", "7OQ1wWSLot6izTWlpPVTe6PHtAzkwJrC1IMfzjPK");
+        headers.set("x-api-key", apiKey);
 
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
@@ -82,35 +99,41 @@ public class DataSyncService {
         try {
             PropertyResponse propertyResponse = objectMapper.readValue(response.getBody(), PropertyResponse.class);
 
-            String nextLink = propertyResponse.getOdataNextLink();
-            if (nextLink != null && !nextLink.isEmpty()) {
-                fetchAllProperties(nextLink, accessToken, properties);
+            propertyResponse.getValue().parallelStream().forEach(property -> {
+                Optional<Property> existingProperty = propertyRepository.findByListingKey(property.getListingKey());
+
+                if (existingProperty.isPresent()) {
+                    if (existingProperty.get().getModificationTimestamp().isBefore(property.getModificationTimestamp())) {
+                        property.setListingKey(existingProperty.get().getListingKey());
+                        properties.add(property);
+                    }
+                } else
+                    properties.add(property);
+            });
+
+            if (!properties.isEmpty()) {
+                propertyRepository.saveAll(properties);
             }
 
-            properties.addAll(propertyResponse.getValue());
+            String nextLink = propertyResponse.getOdataNextLink();
+//            if (nextLink != null && !nextLink.isEmpty()) {
+//                fetchAllProperties(nextLink, accessToken, properties);
+//            }
         } catch (Exception e) {
             // Handle exception
             e.printStackTrace();
         }
     }
 
-    @Async("taskExecutor")
-    public CompletableFuture<Void> saveData(List<Property> properties) {
-        propertyRepository.saveAll(properties);
-        return CompletableFuture.completedFuture(null);
-    }
-
-    public String fetchAndSaveData() {
+    @Scheduled(cron = "0 0 0 * * ?")
+    public void fetchAndSaveData() {
         fetchAccessToken()
                 .thenCompose(accessToken -> fetchData(accessToken))
-                .thenCompose(properties -> saveData(properties))
                 .exceptionally(ex -> {
-                    // Handle exceptions here
                     ex.printStackTrace();
                     return null;
                 });
-
-        return "Data fetching and saving started.";
+        log.info("Data sync job completed at {}", LocalDateTime.now());
     }
 
 }
