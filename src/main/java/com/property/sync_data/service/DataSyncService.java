@@ -81,7 +81,7 @@ public class DataSyncService {
     public CompletableFuture<List<Property>> fetchData(String accessToken) {
         log.info("Fetching data with access token: {}", accessToken);
         List<Property> properties = new ArrayList<>();
-        fetchAllProperties(baseUrl + "/Property?$top=1&$skip=0", accessToken, properties);
+        fetchAllProperties(baseUrl + "/Property?$top=500&$skip=0", accessToken, properties);
         log.info("Fetched {} properties", properties.size());
         return CompletableFuture.completedFuture(properties);
     }
@@ -116,9 +116,9 @@ public class DataSyncService {
             }
 
             String nextLink = propertyResponse.getOdataNextLink();
-//            if (nextLink != null && !nextLink.isEmpty()) {
-//                fetchAllProperties(nextLink, accessToken, properties);
-//            }
+            if (nextLink != null && !nextLink.isEmpty()) {
+                fetchAllProperties(nextLink, accessToken, properties);
+            }
         } catch (Exception e) {
             // Handle exception
             e.printStackTrace();
