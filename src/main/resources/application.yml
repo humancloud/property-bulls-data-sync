@@ -3,9 +3,9 @@ spring:
     name: property-bulls-data-sync
 
   datasource:
-    username: postgres
-    password: root
-    url: jdbc:postgresql://localhost:5432/realtyna-demo
+    username: postgres1
+    password: 9IAzDlUXlP5YbNcMvPai
+    url: jdbc:postgresql://postgres1.czyakgke0hox.ap-south-1.rds.amazonaws.com:5432/propertybulls
   jpa:
     hibernate:
       ddl-auto: update
